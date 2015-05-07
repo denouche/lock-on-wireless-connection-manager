@@ -1,15 +1,27 @@
 #!/bin/bash
+shopt -s extglob
 
 # More doc about network manager dbus API at:
 # https://developer.gnome.org/NetworkManager/unstable/spec.html
 
 # In this file you can add SSIDs which will disable the lock screen
-SSID_FILE="/home/denouche/.ssid-remove-lockscreen"
+SSID_FILE="/home/denouche/.lock-on-wireless-ssid-list"
 WIRELESS_DEVICE_NAME="wlan0"
 
 getVariantValue ()
 {
-    echo "$1" | grep "variant" | cut -d '"' -f2
+    VALUE=$( echo "$1" | grep "variant" | sed -r 's/\s+variant\s+//' )
+    case $VALUE in
+    boolean\ *|double\ *|?int+([0-9])\ *)
+        echo "$( echo "$VALUE" | cut -d' ' -f2 )"
+        ;;
+    array\ of\ bytes\ *|object\ path\ *|string\ *)
+        echo "$( echo "$VALUE" | cut -d'"' -f2 )"
+        ;;
+    *)
+        echo "$( echo "$VALUE" | cut -d' ' -f2 )"
+        ;;
+    esac
 }
 
 getDevices ()
@@ -33,6 +45,12 @@ getAccesPointSsid ()
 {
     local ACCES_POINT="$1"
     echo "$( getVariantValue "$( dbus-send --system --print-reply --type=method_call --dest='org.freedesktop.NetworkManager' "$ACCES_POINT" org.freedesktop.DBus.Properties.Get string:org.freedesktop.NetworkManager.AccessPoint string:Ssid )" )"
+}
+
+getAccesPointHdAddress ()
+{
+    local ACCES_POINT="$1"
+    echo "$( getVariantValue "$( dbus-send --system --print-reply --type=method_call --dest='org.freedesktop.NetworkManager' "$ACCES_POINT" org.freedesktop.DBus.Properties.Get string:org.freedesktop.NetworkManager.AccessPoint string:HwAddress )" )"
 }
 
 containsElement ()
@@ -80,7 +98,9 @@ main ()
             enablePassword
         else
             SSID=$( getAccesPointSsid $ACTIVE_ACCESS_POINT )
-            if containsElement "$SSID" "${SSID_DISABLE_LOCK_PASSWORD[@]}"
+            MAC=$( getAccesPointHdAddress $ACTIVE_ACCESS_POINT )
+            echo "$SSID|$MAC"
+            if containsElement "$SSID|$MAC" "${SSID_DISABLE_LOCK_PASSWORD[@]}"
             then
                 disablePassword
             else 
